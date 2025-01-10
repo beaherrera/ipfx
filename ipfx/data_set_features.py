@@ -53,9 +53,17 @@ DETECTION_PARAMETERS = defaultdict(
         # To override detection parameters for specific StimulusType, add it here.
         # If not explicitly listed, default detection parameters will be used (see extractors_for_sweeps()).
         # See ipfx.stimulus for stimulus types
-        StimulusType.SHORT_SQUARE: {'thresh_frac_floor': 0.1 },
-        StimulusType.CHIRP: {"filter_frequency": None}
-    }
+        StimulusType.SHORT_SQUARE: {
+            "thresh_frac_floor": 0.1,
+            "min_height": 80,
+            "min_peak": 20,
+        },
+        StimulusType.CHIRP: {"filter_frequency": None},
+        StimulusType.LONG_SQUARE: {"min_peak": -15},
+        StimulusType.COARSE_LONG_SQUARE: {"min_peak": -15},
+        StimulusType.SHORT_SQUARE_TRIPLE: {"thresh_frac_floor": 0.1, "min_peak": -15},
+        # StimulusType.RAMP: {'min_peak': -15},
+    },
 )
 
 
@@ -113,6 +121,7 @@ def fallback_on_error(fallback_value=None, catch_errors=(Exception)):
 def extractors_for_sweeps(sweep_set,
                           dv_cutoff=20., thresh_frac=0.05,
                           reject_at_stim_start_interval=0,
+                          min_height=2.,
                           min_peak=-30,
                           filter_frequency=10.,
                           thresh_frac_floor=None,
