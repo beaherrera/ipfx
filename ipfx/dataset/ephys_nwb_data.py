@@ -10,10 +10,15 @@ import h5py
 from pynwb import NWBHDF5IO as _NWBHDF5IO
 
 from pynwb.icephys import (
-    CurrentClampSeries, CurrentClampStimulusSeries,
-    VoltageClampSeries, VoltageClampStimulusSeries,
-    IZeroClampSeries, PatchClampSeries)
+    CurrentClampSeries,
+    CurrentClampStimulusSeries,
+    VoltageClampSeries,
+    VoltageClampStimulusSeries,
+    IZeroClampSeries,
+    PatchClampSeries,
+)
 
+from ipfx.epochs import get_experiment_epoch
 from ipfx.stimulus import StimulusOntology
 from ipfx.dataset.ephys_data_interface import EphysDataInterface
 
@@ -22,6 +27,7 @@ class NWBHDF5IO(_NWBHDF5IO):
     """
     Simple alias to suppress 'ignoring namespace' errors in NWBHDF5IO
     """
+
     def __init__(self, *args, **kwargs):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="ignoring namespace*")
@@ -63,15 +69,17 @@ class EphysNWBData(EphysDataInterface):
     STIMULUS = (VoltageClampStimulusSeries, CurrentClampStimulusSeries)
     RESPONSE = (VoltageClampSeries, CurrentClampSeries)
 
-    def __init__(self,
-                 nwb_file: None,
-                 ontology: StimulusOntology,
-                 load_into_memory: bool = True,
-                 validate_stim: bool = True
-                 ):
+    def __init__(
+        self,
+        nwb_file: None,
+        ontology: StimulusOntology,
+        load_into_memory: bool = True,
+        validate_stim: bool = True,
+    ):
 
         super(EphysNWBData, self).__init__(
-            ontology=ontology, validate_stim=validate_stim)
+            ontology=ontology, validate_stim=validate_stim
+        )
         self.load_nwb(nwb_file, load_into_memory)
 
         self.acquisition_path = "acquisition"
@@ -91,25 +99,35 @@ class EphysNWBData(EphysDataInterface):
         self.nwb_file = nwb_file
         if isinstance(nwb_file, str):
             if load_into_memory:
-                with open(nwb_file, 'rb') as fh:
+                with open(nwb_file, "rb") as fh:
                     data = BytesIO(fh.read())
                 _h5_file = h5py.File(data, "r")
-                reader = NWBHDF5IO(path=_h5_file.filename, mode="r",file=_h5_file, load_namespaces=True)
+                reader = NWBHDF5IO(
+                    path=_h5_file.filename,
+                    mode="r",
+                    file=_h5_file,
+                    load_namespaces=True,
+                )
             else:
-                reader = NWBHDF5IO(nwb_file, mode='r', load_namespaces=True)
+                reader = NWBHDF5IO(nwb_file, mode="r", load_namespaces=True)
         elif isinstance(nwb_file, BytesIO):
             _h5_file = h5py.File(nwb_file, "r")
-            reader = NWBHDF5IO(path=_h5_file.filename, mode="r",file=_h5_file, load_namespaces=True)
+            reader = NWBHDF5IO(
+                path=_h5_file.filename, mode="r", file=_h5_file, load_namespaces=True
+            )
         else:
-            raise TypeError("Invalid input NWB file (only accept NWB filepath or hdf5 obj)!")
+            raise TypeError(
+                "Invalid input NWB file (only accept NWB filepath or hdf5 obj)!"
+            )
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.nwb = reader.read()
 
     @lru_cache(maxsize=None)
-    def _get_series(self, sweep_number: int,
-                    series_class: Tuple[Type[PatchClampSeries]]):
+    def _get_series(
+        self, sweep_number: int, series_class: Tuple[Type[PatchClampSeries]]
+    ):
         """Returns PatchClampSeries of the requested sweep number and type.
 
         The results of this function are cached in order to speed up data access
@@ -148,9 +166,7 @@ class EphysNWBData(EphysDataInterface):
         series = self.nwb.sweep_table.get_series(sweep_number)
 
         if not series:
-            raise ValueError(
-                f"No TimeSeries found for sweep number {sweep_number}."
-            )
+            raise ValueError(f"No TimeSeries found for sweep number {sweep_number}.")
 
         matching_series = []
 
@@ -184,7 +200,6 @@ class EphysNWBData(EphysDataInterface):
                     f"Could not find any {series_name} PatchClampSeries "
                     f"for sweep number {sweep_number}."
                 )
-
 
     def get_sweep_data(
         self, sweep_number: int
@@ -227,11 +242,17 @@ class EphysNWBData(EphysDataInterface):
             stimulus = stimulus * 1.0e12
             response = response * 1.0e3
 
+        swp_idx_start, _ = get_experiment_epoch(stimulus, stimulus_rate)
+
+        swp_idx_stop = len(stimulus) - 1
+        sweep_index_range = (swp_idx_start, swp_idx_stop)
+
         return {
-            'stimulus': stimulus,
-            'response': response,
-            'stimulus_unit': stimulus_unit,
-            'sampling_rate': stimulus_rate
+            "stimulus": stimulus,
+            "response": response,
+            "stimulus_unit": stimulus_unit,
+            "index_range": sweep_index_range,
+            "sampling_rate": stimulus_rate,
         }
 
     def get_sweep_attrs(self, sweep_number):
@@ -240,21 +261,21 @@ class EphysNWBData(EphysDataInterface):
 
         if isinstance(rs, VoltageClampSeries):
             attrs = {
-                'gain': rs.gain,
-                'stimulus_description': rs.stimulus_description,
-                'sweep_number': sweep_number,
-                'clamp_mode': "VoltageClamp"
+                "gain": rs.gain,
+                "stimulus_description": rs.stimulus_description,
+                "sweep_number": sweep_number,
+                "clamp_mode": "VoltageClamp",
             }
 
-        elif isinstance(rs,CurrentClampSeries):
+        elif isinstance(rs, CurrentClampSeries):
 
             attrs = {
-                'gain': rs.gain,
-                'stimulus_description': rs.stimulus_description,
-                'sweep_number': sweep_number,
-                'bias_current': rs.bias_current,
-                'bridge_balance': rs.bridge_balance,
-                'clamp_mode': "CurrentClamp"
+                "gain": rs.gain,
+                "stimulus_description": rs.stimulus_description,
+                "sweep_number": sweep_number,
+                "bias_current": rs.bias_current,
+                "bridge_balance": rs.bridge_balance,
+                "clamp_mode": "CurrentClamp",
             }
         else:
             raise ValueError(f"Must be response series {self.RESPONSE} ")
@@ -285,29 +306,28 @@ class EphysNWBData(EphysDataInterface):
             use date format "%Y-%m-%d %H:%M:%S", drop timezone info
         """
 
-        with h5py.File(self.nwb_file, 'r') as f:
-            if isinstance(f["session_start_time"][()],np.ndarray): # if ndarray
+        with h5py.File(self.nwb_file, "r") as f:
+            if isinstance(f["session_start_time"][()], np.ndarray):  # if ndarray
                 session_start_time = f["session_start_time"][()][-1]
             else:
-                session_start_time = f["session_start_time"][()] # otherwise
+                session_start_time = f["session_start_time"][()]  # otherwise
 
             datetime_object = dateparser.parse(session_start_time)
 
         return datetime_object
 
-
     def get_sweep_metadata(self, sweep_number: int):
         raise NotImplementedError
 
-    def get_stimulus_unit(self,sweep_number):
-        stimulus_series = self._get_series(sweep_number,self.STIMULUS)
+    def get_stimulus_unit(self, sweep_number):
+        stimulus_series = self._get_series(sweep_number, self.STIMULUS)
         return type(self).get_long_unit_name(stimulus_series.unit)
 
-    def get_clamp_mode(self,sweep_number):
+    def get_clamp_mode(self, sweep_number):
         return self.get_sweep_attrs(sweep_number)["clamp_mode"]
 
     def get_spike_times(self, sweep_number):
-        spikes = self.nwb.get_processing_module('spikes')
+        spikes = self.nwb.get_processing_module("spikes")
         sweep_spikes = spikes.get_data_interface(f"Sweep_{sweep_number}")
         return sweep_spikes.timestamps
 
@@ -327,4 +347,6 @@ class EphysNWBData(EphysDataInterface):
 
         valid_SI_units = ["Volts", "Amps"]
         if unit not in valid_SI_units:
-            raise ValueError(F"Unit {unit} is not among the valid SI units {valid_SI_units}")
+            raise ValueError(
+                f"Unit {unit} is not among the valid SI units {valid_SI_units}"
+            )
